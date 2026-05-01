@@ -24,6 +24,9 @@ package:
 source:
   url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
   sha256: ee4818dcf342794f74f429a0aeebef90291ec808fa82609c5140c23e665c4011
+  patches:
+    # Handle None cpu_info['arch'] on aarch64 (py-cpuinfo returns arch=None there).
+    - patches/0001-handle-none-cpu-arch.patch
 
 build:
   number: {{ build }}
