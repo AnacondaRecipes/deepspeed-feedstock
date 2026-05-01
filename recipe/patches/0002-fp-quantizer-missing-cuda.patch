@@ -1,0 +1,36 @@
+From: Anaconda Recipes
+Subject: [PATCH] Handle MissingCUDAException in fp_quantizer.is_compatible
+
+op_builder/fp_quantizer.py:37 calls installed_cuda_version() unconditionally
+inside the `torch.cuda.is_available()` branch. installed_cuda_version() raises
+MissingCUDAException when CUDA_HOME is None — which happens on any GPU machine
+that has the CUDA runtime libs (so torch.cuda.is_available() returns True) but
+no CUDA toolkit / nvcc installed. This breaks `import deepspeed` at import
+time on such systems.
+
+Catch the exception and mark the op incompatible — same effect as the existing
+cuda_okay = False branches further down.
+
+--- a/op_builder/fp_quantizer.py
++++ b/op_builder/fp_quantizer.py
+@@ -9,7 +9,7 @@
+ except ImportError:
+     pkg_version = None
+
+-from .builder import CUDAOpBuilder, installed_cuda_version
++from .builder import CUDAOpBuilder, MissingCUDAException, installed_cuda_version
+
+
+ class FPQuantizerBuilder(CUDAOpBuilder):
+@@ -34,7 +34,10 @@
+         cuda_okay = True
+         if not os.environ.get("DS_IGNORE_CUDA_DETECTION"):
+             if not self.is_rocm_pytorch() and torch.cuda.is_available():  #ignore-cuda
+-                sys_cuda_major, _ = installed_cuda_version()
++                try:
++                    sys_cuda_major, _ = installed_cuda_version()
++                except MissingCUDAException:
++                    return False
+                 torch_cuda_major = int(torch.version.cuda.split('.')[0])
+                 cuda_capability = torch.cuda.get_device_properties(0).major  #ignore-cuda
+                 if cuda_capability < 8:
