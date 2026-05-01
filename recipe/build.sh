@@ -36,4 +36,12 @@ fi
 # sparse_attn pins triton==1.0.0, which we don't ship.
 export DS_BUILD_SPARSE_ATTN=0
 
+# cutlass_ops and ragged_device_ops require the closed-source `dskernels` Python
+# package (`deepspeed-kernels` on PyPI, Linux x86_64-only) at build time — its
+# `is_compatible()` doesn't check for it, but `extra_ldflags()` does. Disable
+# them to keep the build self-contained. Users who want DeepSpeed Inference v2
+# kernels can `pip install deepspeed-kernels` and JIT-compile at runtime.
+export DS_BUILD_CUTLASS_OPS=0
+export DS_BUILD_RAGGED_DEVICE_OPS=0
+
 ${PYTHON} -m pip install . --no-deps --no-build-isolation -vv
