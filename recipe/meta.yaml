@@ -52,6 +52,9 @@ requirements:
     - python
     - pip
     - setuptools
+    # pybind11 headers required for op compilation (csrc/) — torch's extension.h
+    # includes <pybind11/pybind11.h> directly. Match torchaudio 2.10 pin.
+    - pybind11 2.13.6
     # Needed for the async_io op (csrc/aio compilation under DS_BUILD_OPS=1);
     # propagates to run via libaio's run_exports — harmless on CPU builds.
     - libaio                                    # [linux]
