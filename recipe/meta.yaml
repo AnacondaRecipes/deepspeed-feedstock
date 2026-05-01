@@ -57,8 +57,8 @@ requirements:
     - pip
     - setuptools
     # pybind11 headers required for op compilation (csrc/) — torch's extension.h
-    # includes <pybind11/pybind11.h> directly. Match torchaudio 2.10 pin.
-    - pybind11 2.13.6
+    # includes <pybind11/pybind11.h> directly.
+    - pybind11 >=2.13
     # Needed for the async_io op (csrc/aio compilation under DS_BUILD_OPS=1);
     # propagates to run via libaio's run_exports — harmless on CPU builds.
     - libaio                                    # [linux]
@@ -88,11 +88,15 @@ requirements:
     - pydantic >=2.0.0
     - pytorch =2.10.*=*{{ torch_proc_type }}*
     - tqdm
+    # CUDA-only run deps. __cuda gates installation to GPU systems only;
+    # cuda-version pins the runtime CUDA major to match what we built against.
+    - __cuda                                    # [cuda_compiler_version != "None"]
+    - cuda-version {{ cuda_compiler_version }}  # [cuda_compiler_version != "None"]
     - nvidia-ml-py                              # [cuda_compiler_version != "None"]
   run_constrained:
     # Optional-extras users commonly pull in alongside deepspeed. Constraining keeps
     # the solver from picking incompatible versions if these are co-installed.
-    - transformers >=4.32.1     # [cuda_compiler_version != "None"]   # `inf` extra
+    - transformers >=4.32.1     # `inf` extra
     - diffusers >=0.25.0        # `sd` extra
     - safetensors               # `inf` extra
     - sentencepiece             # `inf` extra
