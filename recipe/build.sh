@@ -1,37 +1,39 @@
 #!/bin/bash
 set -ex
 
-# Fix for https://github.com/conda-forge/deepspeed-feedstock/issues/1 to get pip_check
-# working even without ninja as runtime dependency, xref
-# https://github.com/conda-forge/causal-conv1d-feedstock/blob/bf0344b4740b6320723570071d9f7d6a2f5fd38e/recipe/meta.yaml#L20
-sed -i.bak 's@ninja@#ninja@g' requirements/requirements.txt
+# Drop ninja from runtime requirements (only needed at build time, satisfied
+# by `ninja` in test/requires). Without this, `pip check` reports it missing.
+sed -i.bak 's@^ninja$@#ninja@g' requirements/requirements.txt
 
-# Deepspeed ops cannot be built without CUDA
 if [[ ${cuda_compiler_version} != "None" ]]; then
+  # Precompile all DeepSpeed ops on CUDA builds (matches conda-forge).
   export DS_BUILD_OPS=1
 
-  # Set the CUDA arch list from
-  # https://github.com/conda-forge/pytorch-cpu-feedstock/blob/238fe50d9f9a3957584d3713531a81eec91e9f0e/recipe/build.sh#L217-L240
-  # We could instead use CF_TORCH_CUDA_ARCH_LIST, available since CF pytorch 2.10?
   case ${cuda_compiler_version} in
-      12.[89])
-          export TORCH_CUDA_ARCH_LIST="6.0;7.0;7.5;8.0;8.6;9.0;10.0;12.0+PTX"
-          ;;
-      13.0)
-          export TORCH_CUDA_ARCH_LIST="7.5;8.0;8.6;9.0;10.0;11.0;12.0+PTX"
-          # c.f. https://github.com/pytorch/pytorch/pull/161316
-          # export TORCH_NVCC_FLAGS="$TORCH_NVCC_FLAGS -compress-mode=size"
-          ;;
-      *)
-          echo "No CUDA architecture list exists for CUDA v${cuda_compiler_version}. See build.sh for information on adding one."
-          exit 1
+    12.8)
+      # Compute capabilities supported by CUDA 12.8 (matches conda-forge / pytorch 2.10).
+      export TORCH_CUDA_ARCH_LIST="6.0;7.0;7.5;8.0;8.6;9.0;10.0;12.0+PTX"
+      ;;
+    13.0)
+      # CUDA 13.0 drops <7.5 (Volta and earlier).
+      export TORCH_CUDA_ARCH_LIST="7.5;8.0;8.6;9.0;10.0;11.0;12.0+PTX"
+      ;;
+    *)
+      echo "Unhandled cuda_compiler_version=${cuda_compiler_version}; update build.sh."
+      exit 1
+      ;;
   esac
 
+  # oneCCL is Intel x86_64-only; skip the CCL comm op on aarch64.
+  if [[ ${target_platform} == linux-aarch64 ]]; then
+    export DS_BUILD_CCL_COMM=0
+  fi
 else
+  # CPU build: rely on JIT compilation at runtime for any op the user invokes.
   export DS_BUILD_OPS=0
 fi
 
-# Disable sparse_attn since it requires an exact version of triton==1.0.0
+# sparse_attn pins triton==1.0.0, which we don't ship.
 export DS_BUILD_SPARSE_ATTN=0
 
-${PYTHON} -m pip install . -vv
+${PYTHON} -m pip install . --no-deps --no-build-isolation -vv

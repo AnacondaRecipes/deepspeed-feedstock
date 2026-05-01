@@ -1,0 +1,121 @@
+{% set name = "deepspeed" %}
+{% set version = "0.18.9" %}
+{% set build = 0 %}
+
+# Higher build number for CUDA variants so the solver prefers them on GPU systems.
+{% if cuda_compiler_version != "None" %}
+{% set build = build + 200 %}
+{% endif %}
+
+# Match the pytorch build_string convention on pkgs/main:
+#   CPU  -> pytorch * cpu_*
+#   CUDA -> pytorch * gpu_cuda{NN}_*
+# (the *cuda{NN}* substring match works because cuda{NN} is unique within the build_string)
+{% if cuda_compiler_version == "None" %}
+{% set torch_proc_type = "cpu" %}
+{% else %}
+{% set torch_proc_type = "cuda" + cuda_compiler_version | replace('.', '') %}
+{% endif %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  sha256: ee4818dcf342794f74f429a0aeebef90291ec808fa82609c5140c23e665c4011
+
+build:
+  number: {{ build }}
+  string: cuda{{ cuda_compiler_version | replace('.', '') }}py{{ CONDA_PY }}h{{ PKG_HASH }}_{{ PKG_BUILDNUM }}  # [cuda_compiler_version != "None"]
+  string: cpu_py{{ CONDA_PY }}h{{ PKG_HASH }}_{{ PKG_BUILDNUM }}                                                # [cuda_compiler_version == "None"]
+  # Upstream supports Linux primarily; Windows is unmaintained, macOS x86_64 has no
+  # pytorch build to match. macOS arm64 is allowed (CPU only).
+  skip: true  # [win or (osx and x86_64)]
+  # pytorch 2.10 has no py3.14 build on pkgs/main yet
+  skip: true  # [py<310 or py==314]
+
+requirements:
+  build:
+    - {{ compiler('c') }}
+    - {{ compiler('cxx') }}
+    - {{ stdlib('c') }}
+    - {{ compiler('cuda') }}                    # [cuda_compiler_version != "None"]
+    - cuda-version {{ cuda_compiler_version }}  # [cuda_compiler_version != "None"]
+    # CUDA dev libs only needed in build for cross-compile; native builds get them from host.
+    - libcublas-dev      # [build_platform != target_platform and cuda_compiler_version != "None"]
+    - libcurand-dev      # [build_platform != target_platform and cuda_compiler_version != "None"]
+    - libcusolver-dev    # [build_platform != target_platform and cuda_compiler_version != "None"]
+    - libcusparse-dev    # [build_platform != target_platform and cuda_compiler_version != "None"]
+    - cuda-profiler-api  # [build_platform != target_platform and cuda_compiler_version != "None"]
+  host:
+    - python
+    - pip
+    - setuptools
+    # Needed for the async_io op (csrc/aio compilation under DS_BUILD_OPS=1);
+    # propagates to run via libaio's run_exports — harmless on CPU builds.
+    - libaio                                    # [linux]
+    # CUDA op compilation deps (csrc/, op_builder/) — see DeepSpeed setup.py.
+    - cuda-version {{ cuda_compiler_version }}  # [cuda_compiler_version != "None"]
+    - libcublas-dev                             # [cuda_compiler_version != "None"]
+    - libcurand-dev                             # [cuda_compiler_version != "None"]
+    - libcusolver-dev                           # [cuda_compiler_version != "None"]
+    - libcusparse-dev                           # [cuda_compiler_version != "None"]
+    - cuda-profiler-api                         # [cuda_compiler_version != "None"]
+    # oneCCL is Intel x86_64-only; needed for the CCL comm op (op_builder/cpu/comm.py).
+    # On linux-aarch64 CUDA we skip the CCL op via DS_BUILD_CCL_COMM=0 in build.sh.
+    - oneccl-devel                              # [cuda_compiler_version != "None" and x86_64]
+    - pytorch =2.10.*=*{{ torch_proc_type }}*
+  run:
+    - python
+    - einops
+    - hjson-py
+    - msgpack-python
+    - numpy
+    - packaging >=20.0
+    - psutil
+    - py-cpuinfo
+    - pydantic >=2.0.0
+    - pytorch =2.10.*=*{{ torch_proc_type }}*
+    - tqdm
+    - nvidia-ml-py                              # [cuda_compiler_version != "None"]
+  run_constrained:
+    # Optional-extras users commonly pull in alongside deepspeed. Constraining keeps
+    # the solver from picking incompatible versions if these are co-installed.
+    - transformers >=4.32.1     # [cuda_compiler_version != "None"]   # `inf` extra
+    - diffusers >=0.25.0        # `sd` extra
+    - safetensors               # `inf` extra
+    - sentencepiece             # `inf` extra
+    - scipy                     # `deepcompile` extra
+    - mpi4py                    # `1bit-mpi` extra
+
+test:
+  imports:
+    - deepspeed
+  requires:
+    - pip
+    - ninja
+  commands:
+    - pip check
+    - ds_report
+    - deepspeed --help
+
+about:
+  home: https://www.deepspeed.ai
+  license: Apache-2.0
+  license_family: Apache
+  license_file: LICENSE
+  summary: DeepSpeed library for distributed training and inference acceleration
+  description: |
+    DeepSpeed is a deep learning optimization library that makes distributed
+    training and inference easy, efficient, and effective. It enables
+    world-class training speed, memory efficiency, scalability, and
+    accessibility for large model training and inference.
+  doc_url: https://www.deepspeed.ai/getting-started/
+  dev_url: https://github.com/deepspeedai/DeepSpeed
+
+extra:
+  recipe-maintainers:
+    - loadams
+    - weiji14
+    - sdvillal
