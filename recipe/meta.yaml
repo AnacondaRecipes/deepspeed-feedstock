@@ -27,11 +27,10 @@ source:
   patches:
     # Handle None cpu_info['arch'] on aarch64 (py-cpuinfo returns arch=None there).
     - patches/0001-handle-none-cpu-arch.patch
-    # Wrap the op_builder is_compatible() iteration in try/except so any single
-    # op's exception (e.g., MissingCUDAException from fp_quantizer/
-    # transformer_inference/etc when CUDA_HOME isn't set) doesn't abort the
-    # `import deepspeed` at runtime.
-    - patches/0002-tolerate-op-builder-import-errors.patch
+    # Make installed_cuda_version() return (0, 0) instead of raising when
+    # CUDA_HOME is None — fixes `import deepspeed` and `ds_report` on GPU
+    # machines without nvcc installed (incl. aarch64 CI test workers).
+    - patches/0002-installed-cuda-version-no-raise.patch
 
 build:
   number: {{ build }}

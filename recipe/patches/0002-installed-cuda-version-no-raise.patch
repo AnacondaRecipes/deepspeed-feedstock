@@ -1,0 +1,52 @@
+From: Anaconda Recipes
+Subject: [PATCH] installed_cuda_version: return (0, 0) instead of raising when CUDA_HOME is None
+
+The installed_cuda_version() function in op_builder/builder.py raises
+MissingCUDAException when CUDA_HOME is None. Several CUDA op_builders
+(fp_quantizer, transformer_inference, inference_core_ops, ragged_ops,
+ragged_utils, evoformer_attn, inference_cutlass_builder, spatial_inference)
+call it unconditionally inside a `torch.cuda.is_available()` branch — and
+the deepspeed env_report `ds_report` CLI iterates these is_compatible()
+methods at runtime.
+
+On any GPU machine that has the CUDA runtime libs (so torch.cuda is
+available) but no CUDA toolkit / nvcc installed (a common configuration —
+pkgs/main pytorch CUDA only ships runtime libs, not nvcc), this raises
+on `import deepspeed` and on `ds_report`.
+
+Return (0, 0) instead of raising. All callers compare the returned major
+version against minimums (e.g., `if torch_cuda_major < 11 or sys_cuda_major
+< 11`) and naturally degrade to `cuda_okay = False`, marking those ops as
+incompatible — same outcome as the existing failure branches. The
+MissingCUDAException type is preserved for any code that may still raise
+it explicitly.
+
+Patch both copies of builder.py in the sdist (repo-root op_builder/ used at
+build time, and deepspeed/ops/op_builder/ used at runtime/wheel-installed).
+
+--- a/op_builder/builder.py
++++ b/op_builder/builder.py
+@@ -48,7 +48,9 @@ def installed_cuda_version(name=""):
+     import torch.utils.cpp_extension
+     cuda_home = torch.utils.cpp_extension.CUDA_HOME
+     if cuda_home is None:
+-        raise MissingCUDAException("CUDA_HOME does not exist, unable to compile CUDA op(s)")
++        # Return (0, 0) so callers that compare against minimums naturally fall through
++        # to the "incompatible" branch instead of crashing at import time.
++        return 0, 0
+     # Ensure there is not a cuda version mismatch between torch and nvcc compiler
+     output = subprocess.check_output([cuda_home + "/bin/nvcc", "-V"], universal_newlines=True)
+     output_split = output.split()
+--- a/deepspeed/ops/op_builder/builder.py
++++ b/deepspeed/ops/op_builder/builder.py
+@@ -48,7 +48,9 @@ def installed_cuda_version(name=""):
+     import torch.utils.cpp_extension
+     cuda_home = torch.utils.cpp_extension.CUDA_HOME
+     if cuda_home is None:
+-        raise MissingCUDAException("CUDA_HOME does not exist, unable to compile CUDA op(s)")
++        # Return (0, 0) so callers that compare against minimums naturally fall through
++        # to the "incompatible" branch instead of crashing at import time.
++        return 0, 0
+     # Ensure there is not a cuda version mismatch between torch and nvcc compiler
+     output = subprocess.check_output([cuda_home + "/bin/nvcc", "-V"], universal_newlines=True)
+     output_split = output.split()
