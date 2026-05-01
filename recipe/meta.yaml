@@ -46,6 +46,7 @@ requirements:
     - {{ compiler('cuda') }}                    # [cuda_compiler_version != "None"]
     - cuda-version {{ cuda_compiler_version }}  # [cuda_compiler_version != "None"]
     # CUDA dev libs only needed in build for cross-compile; native builds get them from host.
+    - cuda-cudart-dev    # [build_platform != target_platform and cuda_compiler_version != "None"]
     - libcublas-dev      # [build_platform != target_platform and cuda_compiler_version != "None"]
     - libcurand-dev      # [build_platform != target_platform and cuda_compiler_version != "None"]
     - libcusolver-dev    # [build_platform != target_platform and cuda_compiler_version != "None"]
@@ -63,6 +64,9 @@ requirements:
     - libaio                                    # [linux]
     # CUDA op compilation deps (csrc/, op_builder/) — see DeepSpeed setup.py.
     - cuda-version {{ cuda_compiler_version }}  # [cuda_compiler_version != "None"]
+    # cuda-cudart-dev brings cuda-cudart at runtime via run_exports (compiled
+    # ops link libcudart.so directly via -lcudart in extra_ldflags).
+    - cuda-cudart-dev                           # [cuda_compiler_version != "None"]
     - libcublas-dev                             # [cuda_compiler_version != "None"]
     - libcurand-dev                             # [cuda_compiler_version != "None"]
     - libcusolver-dev                           # [cuda_compiler_version != "None"]
