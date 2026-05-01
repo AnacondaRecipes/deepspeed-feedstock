@@ -10,12 +10,31 @@ default '-march=native' when arch is unavailable.
 Also affects op_builder/builder.py's _backup_cpuinfo() which initializes
 arch=None and only sets it for X86_64 — same crash on aarch64.
 
+The DeepSpeed sdist contains two copies of op_builder/builder.py — one
+at the repo root (used at build time) and one inside deepspeed/ops/op_builder/
+(used at runtime / packaged into the wheel). Patch both.
+
 --- a/op_builder/builder.py
 +++ b/op_builder/builder.py
 @@ -418,9 +418,10 @@ class OpBuilder(ABC):
              if cpu_info is None:
                  return "-march=native"
- 
+
+-        if cpu_info['arch'].startswith('PPC_'):
++        arch = cpu_info.get('arch')
++        if arch and arch.startswith('PPC_'):
+             # gcc does not provide -march on PowerPC, use -mcpu instead
+             return '-mcpu=native'
+-        elif cpu_info['arch'].startswith('riscv64'):
++        elif arch and arch.startswith('riscv64'):
+             return '-march=rv64gc'
+         return '-march=native'
+--- a/deepspeed/ops/op_builder/builder.py
++++ b/deepspeed/ops/op_builder/builder.py
+@@ -418,9 +418,10 @@ class OpBuilder(ABC):
+             if cpu_info is None:
+                 return "-march=native"
+
 -        if cpu_info['arch'].startswith('PPC_'):
 +        arch = cpu_info.get('arch')
 +        if arch and arch.startswith('PPC_'):
