@@ -39,8 +39,7 @@ build:
   # Upstream supports Linux primarily; Windows is unmaintained, macOS x86_64 has no
   # pytorch build to match. macOS arm64 is allowed (CPU only).
   skip: true  # [win or (osx and x86_64)]
-  # pytorch 2.10 has no py3.14 build on pkgs/main yet
-  skip: true  # [py<310 or py==314]
+  skip: true  # [py<310]
 
 requirements:
   build:
