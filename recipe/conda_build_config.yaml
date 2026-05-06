@@ -1,0 +1,8 @@
+# cuda_compiler_version values, paired with pytorch builds available on pkgs/main:
+#   None  → CPU build (matches `pytorch * cpu_*`)
+#   12.8  → CUDA 12.8 (matches `pytorch * gpu_cuda128_*`); linux-64 only
+#   13.0  → CUDA 13.0 (matches `pytorch * gpu_cuda130_*`); linux-64 + linux-aarch64
+cuda_compiler_version:
+  - None
+  - 12.8                       # [linux and x86_64]
+  - 13.0                       # [linux]
