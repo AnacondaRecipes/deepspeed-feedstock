@@ -1,6 +1,6 @@
 {% set name = "deepspeed" %}
 {% set version = "0.18.9" %}
-{% set build = 0 %}
+{% set build = 1 %}
 
 # Higher build number for CUDA variants so the solver prefers them on GPU systems.
 {% if cuda_compiler_version != "None" %}
@@ -78,7 +78,7 @@ requirements:
     # oneCCL is Intel x86_64-only; needed for the CCL comm op (op_builder/cpu/comm.py).
     # On linux-aarch64 CUDA we skip the CCL op via DS_BUILD_CCL_COMM=0 in build.sh.
     - oneccl-devel                              # [cuda_compiler_version != "None" and x86_64]
-    - pytorch =2.10.*=*{{ torch_proc_type }}*
+    - pytorch =2.12.*=*{{ torch_proc_type }}*
   run:
     - python
     - einops
@@ -89,7 +89,7 @@ requirements:
     - psutil
     - py-cpuinfo
     - pydantic >=2.0.0
-    - pytorch =2.10.*=*{{ torch_proc_type }}*
+    - pytorch =2.12.*=*{{ torch_proc_type }}*
     - tqdm
     # CUDA-only run deps. __cuda gates installation to GPU systems only;
     # cuda-version pins the runtime CUDA major to match what we built against.
