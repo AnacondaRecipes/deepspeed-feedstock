@@ -10,9 +10,11 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
   export DS_BUILD_OPS=1
 
   case ${cuda_compiler_version} in
-    12.8)
-      # Compute capabilities supported by CUDA 12.8 (matches conda-forge / pytorch 2.10).
-      export TORCH_CUDA_ARCH_LIST="6.0;7.0;7.5;8.0;8.6;9.0;10.0;12.0+PTX"
+    12.9)
+      # Compute capabilities matched to pytorch 2.12's CUDA 12.x build
+      # (sm_60 Pascal and sm_70 Volta dropped — pytorch doesn't ship kernels
+      # for those, so deepspeed ops on those GPUs can't run anyway).
+      export TORCH_CUDA_ARCH_LIST="7.5;8.0;8.6;9.0;10.0;12.0+PTX"
       ;;
     13.0)
       # CUDA 13.0 drops <7.5 (Volta and earlier).
