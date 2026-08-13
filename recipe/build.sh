@@ -11,7 +11,7 @@ if [[ ${cuda_compiler_version} != "None" ]]; then
 
   case ${cuda_compiler_version} in
     12.9)
-      # Compute capabilities matched to pytorch 2.12's CUDA 12.x build
+      # Compute capabilities matched to pytorch 2.13's CUDA 12.x build
       # (sm_60 Pascal and sm_70 Volta dropped — pytorch doesn't ship kernels
       # for those, so deepspeed ops on those GPUs can't run anyway).
       export TORCH_CUDA_ARCH_LIST="7.5;8.0;8.6;9.0;10.0;12.0+PTX"

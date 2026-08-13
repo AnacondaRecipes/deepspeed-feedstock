@@ -1,6 +1,6 @@
 {% set name = "deepspeed" %}
-{% set version = "0.18.9" %}
-{% set build = 1 %}
+{% set version = "0.19.5" %}
+{% set build = 0 %}
 
 # Higher build number for CUDA variants so the solver prefers them on GPU systems.
 {% if cuda_compiler_version != "None" %}
@@ -23,14 +23,12 @@ package:
 
 source:
   url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  sha256: ee4818dcf342794f74f429a0aeebef90291ec808fa82609c5140c23e665c4011
+  sha256: 8dc5d32604a3c7a713b3d14de482533bd328ffebe716cdafcc3511953fc90cdf
   patches:
     # Handle None cpu_info['arch'] on aarch64 (py-cpuinfo returns arch=None there).
     - patches/0001-handle-none-cpu-arch.patch
-    # Make installed_cuda_version() return (0, 0) instead of raising when
-    # CUDA_HOME is None — fixes `import deepspeed` and `ds_report` on GPU
-    # machines without nvcc installed (incl. aarch64 CI test workers).
-    - patches/0002-installed-cuda-version-no-raise.patch
+    # 0002 (installed_cuda_version no-raise) dropped: upstream 0.19.x fixed the
+    # runtime-only-CUDA import/ds_report crash via probe_is_compatible() (GH #7452).
 
 build:
   number: {{ build }}
@@ -60,11 +58,13 @@ requirements:
     - pip
     - setuptools
     # pybind11 headers required for op compilation (csrc/) — torch's extension.h
-    # includes <pybind11/pybind11.h> directly.
-    - pybind11 >=2.13
+    # includes <pybind11/pybind11.h> directly. pytorch 2.13 vendors pybind11 3.x,
+    # so match its host pin + propagate the pybind11-abi ==11 run_export for ABI safety.
+    - pybind11 >=3.0.1,<4
+    - pybind11-abi ==11
     # Needed for the async_io op (csrc/aio compilation under DS_BUILD_OPS=1);
     # propagates to run via libaio's run_exports — harmless on CPU builds.
-    - libaio                                    # [linux]
+    - libaio {{ libaio }}                       # [linux]
     # CUDA op compilation deps (csrc/, op_builder/) — see DeepSpeed setup.py.
     - cuda-version {{ cuda_compiler_version }}  # [cuda_compiler_version != "None"]
     # cuda-cudart-dev brings cuda-cudart at runtime via run_exports (compiled
@@ -78,18 +78,22 @@ requirements:
     # oneCCL is Intel x86_64-only; needed for the CCL comm op (op_builder/cpu/comm.py).
     # On linux-aarch64 CUDA we skip the CCL op via DS_BUILD_CCL_COMM=0 in build.sh.
     - oneccl-devel                              # [cuda_compiler_version != "None" and x86_64]
-    - pytorch =2.12.*=*{{ torch_proc_type }}*
+    - pytorch =2.13.*=*{{ torch_proc_type }}*
   run:
     - python
     - einops
     - hjson-py
     - msgpack-python
+    # ninja-base: DeepSpeed JIT-compiles ops at runtime via torch cpp_extension,
+    # which needs the ninja executable (ninja-base provides it; the full `ninja`
+    # only adds a Python module we don't use). Upstream install_requires since 0.19.x.
+    - ninja-base
     - numpy
     - packaging >=20.0
     - psutil
     - py-cpuinfo
     - pydantic >=2.0.0
-    - pytorch =2.12.*=*{{ torch_proc_type }}*
+    - pytorch =2.13.*=*{{ torch_proc_type }}*
     - tqdm
     # CUDA-only run deps. __cuda gates installation to GPU systems only;
     # cuda-version pins the runtime CUDA major to match what we built against.
@@ -111,7 +115,7 @@ test:
     - deepspeed
   requires:
     - pip
-    - ninja
+    - ninja-base
   commands:
     - pip check
     - ds_report
