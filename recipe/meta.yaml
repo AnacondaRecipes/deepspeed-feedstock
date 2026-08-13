@@ -84,9 +84,10 @@ requirements:
     - einops
     - hjson-py
     - msgpack-python
-    # ninja: DeepSpeed JIT-compiles ops at runtime via torch cpp_extension;
-    # listed in upstream install_requires since 0.19.x.
-    - ninja
+    # ninja-base: DeepSpeed JIT-compiles ops at runtime via torch cpp_extension,
+    # which needs the ninja executable (ninja-base provides it; the full `ninja`
+    # only adds a Python module we don't use). Upstream install_requires since 0.19.x.
+    - ninja-base
     - numpy
     - packaging >=20.0
     - psutil
@@ -114,7 +115,7 @@ test:
     - deepspeed
   requires:
     - pip
-    - ninja
+    - ninja-base
   commands:
     - pip check
     - ds_report
