@@ -27,8 +27,9 @@ source:
   patches:
     # Handle None cpu_info['arch'] on aarch64 (py-cpuinfo returns arch=None there).
     - patches/0001-handle-none-cpu-arch.patch
-    # 0002 (installed_cuda_version no-raise) dropped: upstream 0.19.x fixed the
-    # runtime-only-CUDA import/ds_report crash via probe_is_compatible() (GH #7452).
+    # nvcc must use -std=c++20 on CUDA 13 (pytorch 2.14 headers require C++20);
+    # upstream's nvcc_args() only grants c++20 for CUDA 12.5+, defaulting 13.x to c++17.
+    - patches/0002-cuda13-cpp20-nvcc-std.patch
 
 build:
   number: {{ build }}

@@ -1,0 +1,37 @@
+From: Anaconda Recipes
+Subject: [PATCH] Use -std=c++20 for nvcc on CUDA >= 13
+
+pytorch 2.14 requires C++20 to compile against its ATen/torch headers.
+DeepSpeed's CUDAOpBuilder.nvcc_args() picks the nvcc C++ standard from the
+CUDA version and only grants c++20 for CUDA 12.5+, falling back to c++17 for
+CUDA 13.x. That makes the CUDA 13.0 op build fail with
+"#error C++20 or later compatible compiler is required to use ATen".
+Extend the c++20 branch to CUDA >= 13 (cxx_args() is already torch-version
+gated to c++20 for torch >= 2.12).
+
+The DeepSpeed sdist contains two copies of op_builder/builder.py — one at the
+repo root (used at build time) and one inside deepspeed/ops/op_builder/ (used
+at runtime / packaged into the wheel). Patch both.
+
+--- a/op_builder/builder.py
++++ b/op_builder/builder.py
+@@ -890,7 +890,7 @@
+ 
+             cuda_major, cuda_minor = installed_cuda_version()
+             if cuda_major > 10:
+-                if cuda_major == 12 and cuda_minor >= 5:
++                if (cuda_major == 12 and cuda_minor >= 5) or cuda_major >= 13:
+                     std_lib = '-std=c++20'
+                 else:
+                     std_lib = '-std=c++17'
+--- a/deepspeed/ops/op_builder/builder.py
++++ b/deepspeed/ops/op_builder/builder.py
+@@ -890,7 +890,7 @@
+ 
+             cuda_major, cuda_minor = installed_cuda_version()
+             if cuda_major > 10:
+-                if cuda_major == 12 and cuda_minor >= 5:
++                if (cuda_major == 12 and cuda_minor >= 5) or cuda_major >= 13:
+                     std_lib = '-std=c++20'
+                 else:
+                     std_lib = '-std=c++17'
