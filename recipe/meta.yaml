@@ -1,6 +1,6 @@
 {% set name = "deepspeed" %}
-{% set version = "0.19.5" %}
-{% set build = 1 %}
+{% set version = "0.19.6" %}
+{% set build = 0 %}
 
 # Higher build number for CUDA variants so the solver prefers them on GPU systems.
 {% if cuda_compiler_version != "None" %}
@@ -23,7 +23,7 @@ package:
 
 source:
   url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  sha256: 8dc5d32604a3c7a713b3d14de482533bd328ffebe716cdafcc3511953fc90cdf
+  sha256: 31593acffbe4794c74446094122b1bc29d8c73a137e37aff899ca4a6480df2d8
   patches:
     # Handle None cpu_info['arch'] on aarch64 (py-cpuinfo returns arch=None there).
     - patches/0001-handle-none-cpu-arch.patch
