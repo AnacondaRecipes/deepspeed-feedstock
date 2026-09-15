@@ -1,5 +1,5 @@
 {% set name = "deepspeed" %}
-{% set version = "0.19.5" %}
+{% set version = "0.19.6" %}
 {% set build = 0 %}
 
 # Higher build number for CUDA variants so the solver prefers them on GPU systems.
@@ -23,12 +23,13 @@ package:
 
 source:
   url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  sha256: 8dc5d32604a3c7a713b3d14de482533bd328ffebe716cdafcc3511953fc90cdf
+  sha256: 31593acffbe4794c74446094122b1bc29d8c73a137e37aff899ca4a6480df2d8
   patches:
     # Handle None cpu_info['arch'] on aarch64 (py-cpuinfo returns arch=None there).
     - patches/0001-handle-none-cpu-arch.patch
-    # 0002 (installed_cuda_version no-raise) dropped: upstream 0.19.x fixed the
-    # runtime-only-CUDA import/ds_report crash via probe_is_compatible() (GH #7452).
+    # nvcc must use -std=c++20 on CUDA 13 (pytorch 2.14 headers require C++20);
+    # upstream's nvcc_args() only grants c++20 for CUDA 12.5+, defaulting 13.x to c++17.
+    - patches/0002-cuda13-cpp20-nvcc-std.patch
 
 build:
   number: {{ build }}
@@ -58,8 +59,9 @@ requirements:
     - pip
     - setuptools
     # pybind11 headers required for op compilation (csrc/) — torch's extension.h
-    # includes <pybind11/pybind11.h> directly. pytorch 2.13 vendors pybind11 3.x,
-    # so match its host pin + propagate the pybind11-abi ==11 run_export for ABI safety.
+    # includes <pybind11/pybind11.h> directly. pytorch 2.14 vendors pybind11 3.x
+    # (declares pybind11-abi 11), so match its host pin + propagate the
+    # pybind11-abi ==11 run_export for ABI safety.
     - pybind11 >=3.0.1,<4
     - pybind11-abi ==11
     # Needed for the async_io op (csrc/aio compilation under DS_BUILD_OPS=1);
@@ -78,7 +80,7 @@ requirements:
     # oneCCL is Intel x86_64-only; needed for the CCL comm op (op_builder/cpu/comm.py).
     # On linux-aarch64 CUDA we skip the CCL op via DS_BUILD_CCL_COMM=0 in build.sh.
     - oneccl-devel                              # [cuda_compiler_version != "None" and x86_64]
-    - pytorch =2.13.*=*{{ torch_proc_type }}*
+    - pytorch =2.14.*=*{{ torch_proc_type }}*
   run:
     - python
     - einops
@@ -93,7 +95,7 @@ requirements:
     - psutil
     - py-cpuinfo
     - pydantic >=2.0.0
-    - pytorch =2.13.*=*{{ torch_proc_type }}*
+    - pytorch =2.14.*=*{{ torch_proc_type }}*
     - tqdm
     # CUDA-only run deps. __cuda gates installation to GPU systems only;
     # cuda-version pins the runtime CUDA major to match what we built against.
