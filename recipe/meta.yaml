@@ -1,5 +1,5 @@
 {% set name = "deepspeed" %}
-{% set version = "0.19.6" %}
+{% set version = "0.19.8" %}
 {% set build = 0 %}
 
 # Higher build number for CUDA variants so the solver prefers them on GPU systems.
@@ -18,18 +18,18 @@
 {% endif %}
 
 package:
-  name: {{ name|lower }}
+  name: {{ name }}
   version: {{ version }}
 
 source:
   url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  sha256: 31593acffbe4794c74446094122b1bc29d8c73a137e37aff899ca4a6480df2d8
+  sha256: 9e491abd0827ea5c389dd702e15e11e13d83d904bac4a20d6c2a4cb37207a9af
   patches:
     # Handle None cpu_info['arch'] on aarch64 (py-cpuinfo returns arch=None there).
     - patches/0001-handle-none-cpu-arch.patch
-    # nvcc must use -std=c++20 on CUDA 13 (pytorch 2.14 headers require C++20);
-    # upstream's nvcc_args() only grants c++20 for CUDA 12.5+, defaulting 13.x to c++17.
-    - patches/0002-cuda13-cpp20-nvcc-std.patch
+    # Fix duplicate q_exponent_bits template parameter declarations that cause
+    # NVCC compilation failures in the FP quantizer CUDA extension.
+    - patches/0002-fix-fp-quantizer-compilation.patch
 
 build:
   number: {{ build }}
