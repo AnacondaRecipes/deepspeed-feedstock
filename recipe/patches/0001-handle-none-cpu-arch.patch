@@ -16,10 +16,10 @@ at the repo root (used at build time) and one inside deepspeed/ops/op_builder/
 
 --- a/op_builder/builder.py
 +++ b/op_builder/builder.py
-@@ -418,9 +418,10 @@ class OpBuilder(ABC):
+@@ -441,10 +441,11 @@
              if cpu_info is None:
                  return "-march=native"
-
+ 
 -        if cpu_info['arch'].startswith('PPC_'):
 +        arch = cpu_info.get('arch')
 +        if arch and arch.startswith('PPC_'):
@@ -29,12 +29,13 @@ at the repo root (used at build time) and one inside deepspeed/ops/op_builder/
 +        elif arch and arch.startswith('riscv64'):
              return '-march=rv64gc'
          return '-march=native'
+ 
 --- a/deepspeed/ops/op_builder/builder.py
 +++ b/deepspeed/ops/op_builder/builder.py
-@@ -418,9 +418,10 @@ class OpBuilder(ABC):
+@@ -441,10 +441,11 @@
              if cpu_info is None:
                  return "-march=native"
-
+ 
 -        if cpu_info['arch'].startswith('PPC_'):
 +        arch = cpu_info.get('arch')
 +        if arch and arch.startswith('PPC_'):
@@ -44,3 +45,4 @@ at the repo root (used at build time) and one inside deepspeed/ops/op_builder/
 +        elif arch and arch.startswith('riscv64'):
              return '-march=rv64gc'
          return '-march=native'
+ 

@@ -1,0 +1,28 @@
+From: Anaconda Recipes
+Subject: [PATCH] Fix FP quantizer CUDA template parameter redeclarations
+
+The FP quantizer CUDA kernels redeclare q_exponent_bits, which is
+already defined as a template parameter. NVCC rejects these
+declarations, preventing compilation of fp_quantizer_op.
+
+Remove the duplicate declarations and use the existing template
+parameter in both dequantization kernels.
+
+--- a/csrc/fp_quantizer/fp_quantize_impl.cu
++++ b/csrc/fp_quantizer/fp_quantize_impl.cu
+@@ -231,7 +231,6 @@
+     int tidx = (blockIdx.x * blockDim.x + threadIdx.x) * vector_size;
+ 
+     constexpr int quantized_bits = q_mantisa_bits + q_exponent_bits + 1;
+-    constexpr int q_exponent_bits = total_q_bits - mantisa_bits - 1;
+     constexpr uint16_t _mantisa_mask = (1 << q_mantisa_bits) - 1;
+     constexpr uint16_t _exponent_mask = ((1 << q_exponent_bits) - 1) << q_mantisa_bits;
+     constexpr uint16_t _sign_mask = 1U << (q_mantisa_bits + q_exponent_bits);
+@@ -410,7 +409,6 @@
+     int tidx = (blockIdx.y * blockDim.x + threadIdx.x) * vector_size;
+     int input_index = index * total_num_elements + tidx;
+     constexpr int quantized_bits = q_mantisa_bits + q_exponent_bits + 1;
+-    constexpr int q_exponent_bits = total_q_bits - mantisa_bits - 1;
+     constexpr uint16_t _mantisa_mask = (1 << q_mantisa_bits) - 1;
+     constexpr uint16_t _exponent_mask = ((1 << q_exponent_bits) - 1) << q_mantisa_bits;
+     constexpr uint16_t _sign_mask = 1U << (q_mantisa_bits + q_exponent_bits);
