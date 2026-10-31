@@ -1,45 +1,58 @@
-From 28f78b92ab3883d1cab560d06f9fbba0d58a18af Mon Sep 17 00:00:00 2001
+From a6745e709f9f8293904a30d19d6f982e53df6adf Mon Sep 17 00:00:00 2001
 From: xkong-anaconda <xkong@anaconda.com>
-Date: Sat, 31 Oct 2026 15:24:15 -0500
-Subject: [PATCH] Handle None cpu_info['arch'] from py-cpuinfo on aarch64
+Date: Fri, 1 May 2026 00:55:56 -0500
+Subject: [PATCH] Handle missing or None cpu_info['arch'] in cpu_arch()
 
-py-cpuinfo's get_cpu_info() returns arch=None on some aarch64 CI
-environments, and the lscpu fallback (_backup_cpuinfo) leaves arch=None
-for unrecognised machines. cpu_arch() calls .startswith('PPC_') on the
-value directly and crashes. Upstream 0.19.9 already guards the riscv64
-and simd_width() checks with (cpu_info['arch'] or ''); apply the same
-guard to the PPC_ check so the default '-march=native' is returned.
+cpu_arch() calls .startswith() on cpu_info['arch'] directly. py-cpuinfo
+returns {} when its --json child fails (e.g. _check_arch() raises on an
+unrecognised arch), and DeepSpeed's own lscpu fallback (_backup_cpuinfo)
+leaves arch=None for machines it does not recognise; both crash here.
+Normalise once with cpu_info.get('arch') or '' for the PPC_ and riscv64
+checks so the default '-march=native' is returned.
 
 The sdist ships two identical copies of builder.py (op_builder/ for the
 build, deepspeed/ops/op_builder/ for runtime JIT); patch both.
+
+Originally added in deepspeed-feedstock 48a3ba3 (0.18.x); refreshed for
+0.19.9, where upstream already guards the riscv64 branch against None.
 ---
- deepspeed/ops/op_builder/builder.py | 2 +-
- op_builder/builder.py               | 2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
+ deepspeed/ops/op_builder/builder.py | 5 +++--
+ op_builder/builder.py               | 5 +++--
+ 2 files changed, 6 insertions(+), 4 deletions(-)
 
 diff --git a/deepspeed/ops/op_builder/builder.py b/deepspeed/ops/op_builder/builder.py
-index 58350ba..c35bf5f 100644
+index 58350ba..16f2ac6 100644
 --- a/deepspeed/ops/op_builder/builder.py
 +++ b/deepspeed/ops/op_builder/builder.py
-@@ -442,7 +442,7 @@ class OpBuilder(ABC):
+@@ -442,10 +442,11 @@ class OpBuilder(ABC):
              if cpu_info is None:
                  return "-march=native"
  
 -        if cpu_info['arch'].startswith('PPC_'):
-+        if (cpu_info['arch'] or '').startswith('PPC_'):
++        arch = cpu_info.get('arch') or ''
++        if arch.startswith('PPC_'):
              # gcc does not provide -march on PowerPC, use -mcpu instead
              return '-mcpu=native'
-         elif (cpu_info['arch'] or '').lower().replace('_', '').startswith('riscv64'):
+-        elif (cpu_info['arch'] or '').lower().replace('_', '').startswith('riscv64'):
++        elif arch.lower().replace('_', '').startswith('riscv64'):
+             # The vector extension must be in -march for the RVV kernels to compile.
+             # py-cpuinfo on riscv64 reports "RISCV_64" (uppercase, underscore), but
+             # the lscpu fallback path and platform.uname().machine both report
 diff --git a/op_builder/builder.py b/op_builder/builder.py
-index 58350ba..c35bf5f 100644
+index 58350ba..16f2ac6 100644
 --- a/op_builder/builder.py
 +++ b/op_builder/builder.py
-@@ -442,7 +442,7 @@ class OpBuilder(ABC):
+@@ -442,10 +442,11 @@ class OpBuilder(ABC):
              if cpu_info is None:
                  return "-march=native"
  
 -        if cpu_info['arch'].startswith('PPC_'):
-+        if (cpu_info['arch'] or '').startswith('PPC_'):
++        arch = cpu_info.get('arch') or ''
++        if arch.startswith('PPC_'):
              # gcc does not provide -march on PowerPC, use -mcpu instead
              return '-mcpu=native'
-         elif (cpu_info['arch'] or '').lower().replace('_', '').startswith('riscv64'):
+-        elif (cpu_info['arch'] or '').lower().replace('_', '').startswith('riscv64'):
++        elif arch.lower().replace('_', '').startswith('riscv64'):
+             # The vector extension must be in -march for the RVV kernels to compile.
+             # py-cpuinfo on riscv64 reports "RISCV_64" (uppercase, underscore), but
+             # the lscpu fallback path and platform.uname().machine both report

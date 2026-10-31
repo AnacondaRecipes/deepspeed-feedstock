@@ -25,17 +25,25 @@ source:
   - url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
     sha256: e14b514e243a92ad80bd92f74c835ef76a5c27eec23fae019807458fc9a8cb95
     patches:
-      # Handle None cpu_info['arch'] on aarch64 (py-cpuinfo returns arch=None there).
+      # Handle a missing/None cpu_info['arch'] in cpu_arch(): py-cpuinfo returns {}
+      # when it fails, and DeepSpeed's lscpu fallback can leave arch=None.
       - patches/0001-handle-none-cpu-arch.patch
       # Fix duplicate q_exponent_bits template parameter declarations that cause
       # NVCC compilation failures in the FP quantizer CUDA extension.
       - patches/0002-fix-fp-quantizer-compilation.patch
-  # csrc/adam, csrc/lion (FusedAdam/FusedLion, compiled on CUDA) are adapted from
-  # NVIDIA/apex commit a109f85 (BSD-3-Clause); the sdist omits apex's LICENSE.
+  # csrc/adam, csrc/lion (FusedAdam/FusedLion) are adapted from NVIDIA/apex a109f85
+  # (BSD-3-Clause): compiled into CUDA builds, shipped as JIT sources in all builds.
+  # The sdist omits apex's LICENSE.
   - url: https://raw.githubusercontent.com/NVIDIA/apex/a109f856840ebb3ff5578e0bddfc4cffd4b96ed0/LICENSE
     sha256: 8827cfdf3a6027c142be77f7cacb90c1a4951bd2d948c819784ce7a9938690af
     folder: apex-license
-    file_name: LICENSE
+    fn: LICENSE-apex
+  # runtime/data_pipeline/data_sampling/indexed_dataset.py is copied from fairseq
+  # (MIT, "see the LICENSE file"); the sdist omits it. Text identical v0.10.0..main.
+  - url: https://raw.githubusercontent.com/facebookresearch/fairseq/4a388e64cd646ed7d7ad8de8fae55df2b8eea91d/LICENSE
+    sha256: 52412d7bc7ce4157ea628bbaacb8829e0a9cb3c58f57f99176126bc8cf2bfc85
+    folder: fairseq-license
+    fn: LICENSE-fairseq
 
 build:
   number: {{ build }}
@@ -110,18 +118,13 @@ requirements:
     - cuda-version {{ cuda_compiler_version }}  # [cuda_compiler_version != "None"]
     - nvidia-ml-py                              # [cuda_compiler_version != "None"]
   run_constrained:
-    # Optional-extras users commonly pull in alongside deepspeed. Constraining keeps
-    # the solver from picking incompatible versions if these are co-installed.
-    # `inf` lm-eval==0.3.0 is omitted: pkgs/main ships only lm_eval 0.4.x, so the
-    # pin would block co-installing deepspeed with any lm_eval.
+    # Bounded optional extras only (unbounded ones would be no-ops). `inf`
+    # lm-eval==0.3.0 is deliberately omitted (maintainer decision): only upstream's
+    # unshipped tests use it, and it would exclude lm_eval 0.4.11, the only one on main.
     - transformers >=4.32.1     # `inf` extra
     - diffusers >=0.25.0        # `sd` extra
     - triton >=2.1.0            # `sd` extra
     - torchembed >=0.3.1        # `torchembed` extra
-    - safetensors               # `inf` extra
-    - sentencepiece             # `inf` extra
-    - scipy                     # `deepcompile` extra
-    - mpi4py                    # `1bit-mpi` extra
 
 test:
   imports:
@@ -133,21 +136,28 @@ test:
     - pip check
     - ds_report
     - deepspeed --help
+    # Regression test for patch 0001: cpu_arch() must survive {} and arch=None.
+    - python -c 'import cpuinfo; from deepspeed.ops.op_builder.fused_adam import FusedAdamBuilder as B; r = [(setattr(cpuinfo, "get_cpu_info", lambda i=i:i), B().cpu_arch())[1] for i in (dict(), dict(arch=None))]; assert r == ["-march=native"] * 2, r'
+    # Load the precompiled (DS_BUILD_OPS=1) extensions to catch a torch ABI mismatch.
+    - python -c 'import torch, importlib; [importlib.import_module("deepspeed.ops." + m) for m in ("adam.fused_adam_op", "lion.fused_lion_op", "fp_quantizer.fp_quantizer_op", "adam.cpu_adam_op", "aio.async_io_op")]'  # [cuda_compiler_version != "None"]
+    # Run one FusedAdam step on the GPU when the test worker has one.
+    - if python -c 'import sys, torch; sys.exit(not torch.cuda.is_available())'; then python -c 'import torch; from deepspeed.ops.adam import FusedAdam; p = torch.nn.Parameter(torch.ones(8, device="cuda")); p.grad = torch.ones(8, device="cuda"); FusedAdam([p], lr=0.1).step(); assert (p < 1).all(), p'; else echo no GPU on test worker, skipping FusedAdam step; fi  # [cuda_compiler_version != "None"]
 
 about:
   home: https://www.deepspeed.ai
-  license: Apache-2.0 AND BSD-3-Clause
+  license: Apache-2.0 AND BSD-3-Clause AND MIT
   license_family: Other
   license_file:
     - LICENSE
-    - apex-license/LICENSE
+    - apex-license/LICENSE-apex
+    - fairseq-license/LICENSE-fairseq
   summary: DeepSpeed library for distributed training and inference acceleration
   description: |
     DeepSpeed is a deep learning optimization library that makes distributed
     training and inference easy, efficient, and effective. It enables
     world-class training speed, memory efficiency, scalability, and
     accessibility for large model training and inference.
-  doc_url: https://www.deepspeed.ai/getting-started/
+  doc_url: https://deepspeed.readthedocs.io
   dev_url: https://github.com/deepspeedai/DeepSpeed
 
 extra:
