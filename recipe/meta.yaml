@@ -1,5 +1,5 @@
 {% set name = "deepspeed" %}
-{% set version = "0.19.8" %}
+{% set version = "0.19.9" %}
 {% set build = 0 %}
 
 # Higher build number for CUDA variants so the solver prefers them on GPU systems.
@@ -22,14 +22,20 @@ package:
   version: {{ version }}
 
 source:
-  url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
-  sha256: 9e491abd0827ea5c389dd702e15e11e13d83d904bac4a20d6c2a4cb37207a9af
-  patches:
-    # Handle None cpu_info['arch'] on aarch64 (py-cpuinfo returns arch=None there).
-    - patches/0001-handle-none-cpu-arch.patch
-    # Fix duplicate q_exponent_bits template parameter declarations that cause
-    # NVCC compilation failures in the FP quantizer CUDA extension.
-    - patches/0002-fix-fp-quantizer-compilation.patch
+  - url: https://pypi.org/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+    sha256: e14b514e243a92ad80bd92f74c835ef76a5c27eec23fae019807458fc9a8cb95
+    patches:
+      # Handle None cpu_info['arch'] on aarch64 (py-cpuinfo returns arch=None there).
+      - patches/0001-handle-none-cpu-arch.patch
+      # Fix duplicate q_exponent_bits template parameter declarations that cause
+      # NVCC compilation failures in the FP quantizer CUDA extension.
+      - patches/0002-fix-fp-quantizer-compilation.patch
+  # csrc/adam, csrc/lion (FusedAdam/FusedLion, compiled on CUDA) are adapted from
+  # NVIDIA/apex commit a109f85 (BSD-3-Clause); the sdist omits apex's LICENSE.
+  - url: https://raw.githubusercontent.com/NVIDIA/apex/a109f856840ebb3ff5578e0bddfc4cffd4b96ed0/LICENSE
+    sha256: 8827cfdf3a6027c142be77f7cacb90c1a4951bd2d948c819784ce7a9938690af
+    folder: apex-license
+    file_name: LICENSE
 
 build:
   number: {{ build }}
@@ -38,7 +44,8 @@ build:
   # Upstream supports Linux primarily; Windows is unmaintained, macOS x86_64 has no
   # pytorch build to match. macOS arm64 is allowed (CPU only).
   skip: true  # [win or (osx and x86_64)]
-  skip: true  # [py<310]
+  # pytorch 2.15 requires Python >=3.11 (no py3.10 builds on pkgs/main).
+  skip: true  # [py<311]
 
 requirements:
   build:
@@ -59,10 +66,10 @@ requirements:
     - pip
     - setuptools
     # pybind11 headers required for op compilation (csrc/) — torch's extension.h
-    # includes <pybind11/pybind11.h> directly. pytorch 2.14 vendors pybind11 3.x
-    # (declares pybind11-abi 11), so match its host pin + propagate the
-    # pybind11-abi ==11 run_export for ABI safety.
-    - pybind11 >=3.0.1,<4
+    # includes <pybind11/pybind11.h> directly. pytorch 2.15 builds against
+    # pybind11 >=3.0.4,<4 (pybind11-abi 11), so match its host pin + propagate
+    # the pybind11-abi ==11 run_export for ABI safety.
+    - pybind11 >=3.0.4,<4
     - pybind11-abi ==11
     # Needed for the async_io op (csrc/aio compilation under DS_BUILD_OPS=1);
     # propagates to run via libaio's run_exports — harmless on CPU builds.
@@ -80,7 +87,7 @@ requirements:
     # oneCCL is Intel x86_64-only; needed for the CCL comm op (op_builder/cpu/comm.py).
     # On linux-aarch64 CUDA we skip the CCL op via DS_BUILD_CCL_COMM=0 in build.sh.
     - oneccl-devel                              # [cuda_compiler_version != "None" and x86_64]
-    - pytorch =2.14.*=*{{ torch_proc_type }}*
+    - pytorch =2.15.*=*{{ torch_proc_type }}*
   run:
     - python
     - einops
@@ -95,7 +102,7 @@ requirements:
     - psutil
     - py-cpuinfo
     - pydantic >=2.0.0
-    - pytorch =2.14.*=*{{ torch_proc_type }}*
+    - pytorch =2.15.*=*{{ torch_proc_type }}*
     - tqdm
     # CUDA-only run deps. __cuda gates installation to GPU systems only;
     # cuda-version pins the runtime CUDA major to match what we built against.
@@ -105,8 +112,12 @@ requirements:
   run_constrained:
     # Optional-extras users commonly pull in alongside deepspeed. Constraining keeps
     # the solver from picking incompatible versions if these are co-installed.
+    # `inf` lm-eval==0.3.0 is omitted: pkgs/main ships only lm_eval 0.4.x, so the
+    # pin would block co-installing deepspeed with any lm_eval.
     - transformers >=4.32.1     # `inf` extra
     - diffusers >=0.25.0        # `sd` extra
+    - triton >=2.1.0            # `sd` extra
+    - torchembed >=0.3.1        # `torchembed` extra
     - safetensors               # `inf` extra
     - sentencepiece             # `inf` extra
     - scipy                     # `deepcompile` extra
@@ -125,9 +136,11 @@ test:
 
 about:
   home: https://www.deepspeed.ai
-  license: Apache-2.0
-  license_family: Apache
-  license_file: LICENSE
+  license: Apache-2.0 AND BSD-3-Clause
+  license_family: Other
+  license_file:
+    - LICENSE
+    - apex-license/LICENSE
   summary: DeepSpeed library for distributed training and inference acceleration
   description: |
     DeepSpeed is a deep learning optimization library that makes distributed
