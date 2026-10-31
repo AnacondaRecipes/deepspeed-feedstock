@@ -1,48 +1,45 @@
-From: Anaconda Recipes
+From 28f78b92ab3883d1cab560d06f9fbba0d58a18af Mon Sep 17 00:00:00 2001
+From: xkong-anaconda <xkong@anaconda.com>
+Date: Sat, 31 Oct 2026 15:24:15 -0500
 Subject: [PATCH] Handle None cpu_info['arch'] from py-cpuinfo on aarch64
 
-py-cpuinfo's get_cpu_info() returns a dict with arch=None on some
-aarch64 CI environments where /proc/cpuinfo doesn't expose the expected
-fields. The original code calls .startswith() on the value directly,
-which crashes on None. Guard the lookups so we fall through to the
-default '-march=native' when arch is unavailable.
+py-cpuinfo's get_cpu_info() returns arch=None on some aarch64 CI
+environments, and the lscpu fallback (_backup_cpuinfo) leaves arch=None
+for unrecognised machines. cpu_arch() calls .startswith('PPC_') on the
+value directly and crashes. Upstream 0.19.9 already guards the riscv64
+and simd_width() checks with (cpu_info['arch'] or ''); apply the same
+guard to the PPC_ check so the default '-march=native' is returned.
 
-Also affects op_builder/builder.py's _backup_cpuinfo() which initializes
-arch=None and only sets it for X86_64 — same crash on aarch64.
+The sdist ships two identical copies of builder.py (op_builder/ for the
+build, deepspeed/ops/op_builder/ for runtime JIT); patch both.
+---
+ deepspeed/ops/op_builder/builder.py | 2 +-
+ op_builder/builder.py               | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
 
-The DeepSpeed sdist contains two copies of op_builder/builder.py — one
-at the repo root (used at build time) and one inside deepspeed/ops/op_builder/
-(used at runtime / packaged into the wheel). Patch both.
-
---- a/op_builder/builder.py
-+++ b/op_builder/builder.py
-@@ -441,10 +441,11 @@
-             if cpu_info is None:
-                 return "-march=native"
- 
--        if cpu_info['arch'].startswith('PPC_'):
-+        arch = cpu_info.get('arch')
-+        if arch and arch.startswith('PPC_'):
-             # gcc does not provide -march on PowerPC, use -mcpu instead
-             return '-mcpu=native'
--        elif cpu_info['arch'].startswith('riscv64'):
-+        elif arch and arch.startswith('riscv64'):
-             return '-march=rv64gc'
-         return '-march=native'
- 
+diff --git a/deepspeed/ops/op_builder/builder.py b/deepspeed/ops/op_builder/builder.py
+index 58350ba..c35bf5f 100644
 --- a/deepspeed/ops/op_builder/builder.py
 +++ b/deepspeed/ops/op_builder/builder.py
-@@ -441,10 +441,11 @@
+@@ -442,7 +442,7 @@ class OpBuilder(ABC):
              if cpu_info is None:
                  return "-march=native"
  
 -        if cpu_info['arch'].startswith('PPC_'):
-+        arch = cpu_info.get('arch')
-+        if arch and arch.startswith('PPC_'):
++        if (cpu_info['arch'] or '').startswith('PPC_'):
              # gcc does not provide -march on PowerPC, use -mcpu instead
              return '-mcpu=native'
--        elif cpu_info['arch'].startswith('riscv64'):
-+        elif arch and arch.startswith('riscv64'):
-             return '-march=rv64gc'
-         return '-march=native'
+         elif (cpu_info['arch'] or '').lower().replace('_', '').startswith('riscv64'):
+diff --git a/op_builder/builder.py b/op_builder/builder.py
+index 58350ba..c35bf5f 100644
+--- a/op_builder/builder.py
++++ b/op_builder/builder.py
+@@ -442,7 +442,7 @@ class OpBuilder(ABC):
+             if cpu_info is None:
+                 return "-march=native"
  
+-        if cpu_info['arch'].startswith('PPC_'):
++        if (cpu_info['arch'] or '').startswith('PPC_'):
+             # gcc does not provide -march on PowerPC, use -mcpu instead
+             return '-mcpu=native'
+         elif (cpu_info['arch'] or '').lower().replace('_', '').startswith('riscv64'):
