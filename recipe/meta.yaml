@@ -142,8 +142,9 @@ test:
     # async_io_op resolves deepspeed_pin_tensor_t from pin_memory_op, which upstream's
     # AsyncIOBuilder.load() makes global first (ctypes RTLD_GLOBAL); do the same here.
     - python -c 'import torch, ctypes, importlib as il; ctypes.CDLL(il.import_module("deepspeed.ops.pin_memory.pin_memory_op").__file__, mode=ctypes.RTLD_GLOBAL); [il.import_module("deepspeed.ops." + m) for m in ("adam.fused_adam_op", "lion.fused_lion_op", "fp_quantizer.fp_quantizer_op", "adam.cpu_adam_op", "aio.async_io_op")]'  # [cuda_compiler_version != "None"]
-    # Run one FusedAdam step on the GPU when the test worker has one.
-    - if python -c 'import sys, torch; sys.exit(not torch.cuda.is_available())'; then python -c 'import torch; from deepspeed.ops.adam import FusedAdam; p = torch.nn.Parameter(torch.ones(8, device="cuda")); p.grad = torch.ones(8, device="cuda"); FusedAdam([p], lr=0.1).step(); assert (p < 1).all(), p'; else echo no GPU on test worker, skipping FusedAdam step; fi  # [cuda_compiler_version != "None"]
+    # Run one FusedAdam step on the GPU when torch can run kernels on the worker's GPU
+    # (the linux-aarch64 workers' T4G is sm_75, below pytorch's aarch64 CUDA arch floor).
+    - if python -c 'import torch; torch.ones(1, device="cuda").add_(1); torch.cuda.synchronize()'; then python -c 'import torch; from deepspeed.ops.adam import FusedAdam; p = torch.nn.Parameter(torch.ones(8, device="cuda")); p.grad = torch.ones(8, device="cuda"); FusedAdam([p], lr=0.1).step(); assert (p < 1).all(), p'; else echo no GPU usable by torch on test worker, skipping FusedAdam step; fi  # [cuda_compiler_version != "None"]
 
 about:
   home: https://www.deepspeed.ai
