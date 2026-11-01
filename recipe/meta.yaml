@@ -139,7 +139,9 @@ test:
     # Regression test for patch 0001: cpu_arch() must survive {} and arch=None.
     - python -c 'import cpuinfo; from deepspeed.ops.op_builder.fused_adam import FusedAdamBuilder as B; r = [(setattr(cpuinfo, "get_cpu_info", lambda i=i:i), B().cpu_arch())[1] for i in (dict(), dict(arch=None))]; assert r == ["-march=native"] * 2, r'
     # Load the precompiled (DS_BUILD_OPS=1) extensions to catch a torch ABI mismatch.
-    - python -c 'import torch, importlib; [importlib.import_module("deepspeed.ops." + m) for m in ("adam.fused_adam_op", "lion.fused_lion_op", "fp_quantizer.fp_quantizer_op", "adam.cpu_adam_op", "aio.async_io_op")]'  # [cuda_compiler_version != "None"]
+    # async_io_op resolves deepspeed_pin_tensor_t from pin_memory_op, which upstream's
+    # AsyncIOBuilder.load() makes global first (ctypes RTLD_GLOBAL); do the same here.
+    - python -c 'import torch, ctypes, importlib as il; ctypes.CDLL(il.import_module("deepspeed.ops.pin_memory.pin_memory_op").__file__, mode=ctypes.RTLD_GLOBAL); [il.import_module("deepspeed.ops." + m) for m in ("adam.fused_adam_op", "lion.fused_lion_op", "fp_quantizer.fp_quantizer_op", "adam.cpu_adam_op", "aio.async_io_op")]'  # [cuda_compiler_version != "None"]
     # Run one FusedAdam step on the GPU when the test worker has one.
     - if python -c 'import sys, torch; sys.exit(not torch.cuda.is_available())'; then python -c 'import torch; from deepspeed.ops.adam import FusedAdam; p = torch.nn.Parameter(torch.ones(8, device="cuda")); p.grad = torch.ones(8, device="cuda"); FusedAdam([p], lr=0.1).step(); assert (p < 1).all(), p'; else echo no GPU on test worker, skipping FusedAdam step; fi  # [cuda_compiler_version != "None"]
 
