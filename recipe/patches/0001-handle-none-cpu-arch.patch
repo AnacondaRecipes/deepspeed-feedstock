@@ -1,48 +1,58 @@
-From: Anaconda Recipes
-Subject: [PATCH] Handle None cpu_info['arch'] from py-cpuinfo on aarch64
+From a6745e709f9f8293904a30d19d6f982e53df6adf Mon Sep 17 00:00:00 2001
+From: Xianglong Kong <xkong@anaconda.com>
+Date: Fri, 1 May 2026 00:55:56 -0500
+Subject: [PATCH] Handle missing or None cpu_info['arch'] in cpu_arch()
 
-py-cpuinfo's get_cpu_info() returns a dict with arch=None on some
-aarch64 CI environments where /proc/cpuinfo doesn't expose the expected
-fields. The original code calls .startswith() on the value directly,
-which crashes on None. Guard the lookups so we fall through to the
-default '-march=native' when arch is unavailable.
+cpu_arch() calls .startswith() on cpu_info['arch'] directly. py-cpuinfo
+returns {} when its --json child fails (e.g. _check_arch() raises on an
+unrecognised arch), and DeepSpeed's own lscpu fallback (_backup_cpuinfo)
+leaves arch=None for machines it does not recognise; both crash here.
+Normalise once with cpu_info.get('arch') or '' for the PPC_ and riscv64
+checks so the default '-march=native' is returned.
 
-Also affects op_builder/builder.py's _backup_cpuinfo() which initializes
-arch=None and only sets it for X86_64 — same crash on aarch64.
+The sdist ships two identical copies of builder.py (op_builder/ for the
+build, deepspeed/ops/op_builder/ for runtime JIT); patch both.
 
-The DeepSpeed sdist contains two copies of op_builder/builder.py — one
-at the repo root (used at build time) and one inside deepspeed/ops/op_builder/
-(used at runtime / packaged into the wheel). Patch both.
+Originally added in deepspeed-feedstock 48a3ba3 (0.18.x); refreshed for
+0.19.9, where upstream already guards the riscv64 branch against None.
+---
+ deepspeed/ops/op_builder/builder.py | 5 +++--
+ op_builder/builder.py               | 5 +++--
+ 2 files changed, 6 insertions(+), 4 deletions(-)
 
---- a/op_builder/builder.py
-+++ b/op_builder/builder.py
-@@ -441,10 +441,11 @@
-             if cpu_info is None:
-                 return "-march=native"
- 
--        if cpu_info['arch'].startswith('PPC_'):
-+        arch = cpu_info.get('arch')
-+        if arch and arch.startswith('PPC_'):
-             # gcc does not provide -march on PowerPC, use -mcpu instead
-             return '-mcpu=native'
--        elif cpu_info['arch'].startswith('riscv64'):
-+        elif arch and arch.startswith('riscv64'):
-             return '-march=rv64gc'
-         return '-march=native'
- 
+diff --git a/deepspeed/ops/op_builder/builder.py b/deepspeed/ops/op_builder/builder.py
+index 58350ba..16f2ac6 100644
 --- a/deepspeed/ops/op_builder/builder.py
 +++ b/deepspeed/ops/op_builder/builder.py
-@@ -441,10 +441,11 @@
+@@ -442,10 +442,11 @@ class OpBuilder(ABC):
              if cpu_info is None:
                  return "-march=native"
  
 -        if cpu_info['arch'].startswith('PPC_'):
-+        arch = cpu_info.get('arch')
-+        if arch and arch.startswith('PPC_'):
++        arch = cpu_info.get('arch') or ''
++        if arch.startswith('PPC_'):
              # gcc does not provide -march on PowerPC, use -mcpu instead
              return '-mcpu=native'
--        elif cpu_info['arch'].startswith('riscv64'):
-+        elif arch and arch.startswith('riscv64'):
-             return '-march=rv64gc'
-         return '-march=native'
+-        elif (cpu_info['arch'] or '').lower().replace('_', '').startswith('riscv64'):
++        elif arch.lower().replace('_', '').startswith('riscv64'):
+             # The vector extension must be in -march for the RVV kernels to compile.
+             # py-cpuinfo on riscv64 reports "RISCV_64" (uppercase, underscore), but
+             # the lscpu fallback path and platform.uname().machine both report
+diff --git a/op_builder/builder.py b/op_builder/builder.py
+index 58350ba..16f2ac6 100644
+--- a/op_builder/builder.py
++++ b/op_builder/builder.py
+@@ -442,10 +442,11 @@ class OpBuilder(ABC):
+             if cpu_info is None:
+                 return "-march=native"
  
+-        if cpu_info['arch'].startswith('PPC_'):
++        arch = cpu_info.get('arch') or ''
++        if arch.startswith('PPC_'):
+             # gcc does not provide -march on PowerPC, use -mcpu instead
+             return '-mcpu=native'
+-        elif (cpu_info['arch'] or '').lower().replace('_', '').startswith('riscv64'):
++        elif arch.lower().replace('_', '').startswith('riscv64'):
+             # The vector extension must be in -march for the RVV kernels to compile.
+             # py-cpuinfo on riscv64 reports "RISCV_64" (uppercase, underscore), but
+             # the lscpu fallback path and platform.uname().machine both report

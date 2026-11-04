@@ -1,24 +1,31 @@
 #!/bin/bash
 set -ex
 
-# Drop ninja from runtime requirements (only needed at build time, satisfied
-# by `ninja` in test/requires). Without this, `pip check` reports it missing.
+# Drop the PyPI `ninja` requirement from the wheel metadata: the conda run dep is
+# `ninja-base` (the executable runtime JIT needs), which doesn't provide the `ninja`
+# distribution, so `pip check` would report it missing. Name translation, not removal.
 sed -i.bak 's@^ninja$@#ninja@g' requirements/requirements.txt
 
 if [[ ${cuda_compiler_version} != "None" ]]; then
   # Precompile all DeepSpeed ops on CUDA builds (matches conda-forge).
   export DS_BUILD_OPS=1
 
+  # Compute capabilities match pytorch-feedstock's TORCH_CUDA_ARCH_LIST per platform:
+  # kernels for an arch pytorch doesn't ship can't run, since torch itself can't.
   case ${cuda_compiler_version} in
     12.9)
-      # Compute capabilities matched to pytorch 2.13's CUDA 12.x build
-      # (sm_60 Pascal and sm_70 Volta dropped — pytorch doesn't ship kernels
-      # for those, so deepspeed ops on those GPUs can't run anyway).
+      # sm_60 Pascal and sm_70 Volta dropped, as in pytorch's CUDA 12.x build.
       export TORCH_CUDA_ARCH_LIST="7.5;8.0;8.6;9.0;10.0;12.0+PTX"
       ;;
     13.0)
-      # CUDA 13.0 drops <7.5 (Volta and earlier).
-      export TORCH_CUDA_ARCH_LIST="7.5;8.0;8.6;9.0;10.0;11.0;12.0+PTX"
+      if [[ ${target_platform} == linux-aarch64 ]]; then
+        # pytorch's aarch64 CUDA 13 list: no 7.5/8.6 (x86_64-only SKUs), adds
+        # 11.0 (Jetson Thor) and 12.1 (DGX Spark).
+        export TORCH_CUDA_ARCH_LIST="8.0;9.0;10.0;11.0;12.0;12.1+PTX"
+      else
+        # CUDA 13.0 drops <7.5 (Volta and earlier).
+        export TORCH_CUDA_ARCH_LIST="7.5;8.0;8.6;9.0;10.0;12.0+PTX"
+      fi
       ;;
     *)
       echo "Unhandled cuda_compiler_version=${cuda_compiler_version}; update build.sh."
