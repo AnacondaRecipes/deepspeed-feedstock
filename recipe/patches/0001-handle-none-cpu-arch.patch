@@ -1,5 +1,5 @@
 From a6745e709f9f8293904a30d19d6f982e53df6adf Mon Sep 17 00:00:00 2001
-From: xkong-anaconda <xkong@anaconda.com>
+From: Xianglong Kong <xkong@anaconda.com>
 Date: Fri, 1 May 2026 00:55:56 -0500
 Subject: [PATCH] Handle missing or None cpu_info['arch'] in cpu_arch()
 

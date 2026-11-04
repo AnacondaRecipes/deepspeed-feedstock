@@ -54,6 +54,11 @@ build:
   skip: true  # [win or (osx and x86_64)]
   # pytorch 2.15 requires Python >=3.11 (no py3.10 builds on pkgs/main).
   skip: true  # [py<311]
+  # cusolver/cusparse headers are needed at compile time (ATen/cuda/CUDAContextLight.h
+  # includes them), but no compiled op links or calls either library.
+  ignore_run_exports_from:   # [cuda_compiler_version != "None"]
+    - libcusolver-dev        # [cuda_compiler_version != "None"]
+    - libcusparse-dev        # [cuda_compiler_version != "None"]
 
 requirements:
   build:
@@ -62,13 +67,6 @@ requirements:
     - {{ stdlib('c') }}
     - {{ compiler('cuda') }}                    # [cuda_compiler_version != "None"]
     - cuda-version {{ cuda_compiler_version }}  # [cuda_compiler_version != "None"]
-    # CUDA dev libs only needed in build for cross-compile; native builds get them from host.
-    - cuda-cudart-dev    # [build_platform != target_platform and cuda_compiler_version != "None"]
-    - libcublas-dev      # [build_platform != target_platform and cuda_compiler_version != "None"]
-    - libcurand-dev      # [build_platform != target_platform and cuda_compiler_version != "None"]
-    - libcusolver-dev    # [build_platform != target_platform and cuda_compiler_version != "None"]
-    - libcusparse-dev    # [build_platform != target_platform and cuda_compiler_version != "None"]
-    - cuda-profiler-api  # [build_platform != target_platform and cuda_compiler_version != "None"]
   host:
     - python
     - pip
@@ -112,10 +110,9 @@ requirements:
     - pydantic >=2.0.0
     - pytorch =2.15.*=*{{ torch_proc_type }}*
     - tqdm
-    # CUDA-only run deps. __cuda gates installation to GPU systems only;
-    # cuda-version pins the runtime CUDA major to match what we built against.
+    # CUDA-only run deps. __cuda gates installation to GPU systems only; the
+    # cuda-version >=X.Y,<X+1 range comes from compiler('cuda')'s run_exports.
     - __cuda                                    # [cuda_compiler_version != "None"]
-    - cuda-version {{ cuda_compiler_version }}  # [cuda_compiler_version != "None"]
     - nvidia-ml-py                              # [cuda_compiler_version != "None"]
   run_constrained:
     # Bounded optional extras only (unbounded ones would be no-ops). `inf`
